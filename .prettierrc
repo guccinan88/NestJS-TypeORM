@@ -1,0 +1,6 @@
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "sql.format": true,
+  "sql.prettier": true
+}
