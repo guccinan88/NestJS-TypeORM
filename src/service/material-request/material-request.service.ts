@@ -16,7 +16,7 @@ import {
   MaterialRequestItemsUom,
   MaterialAutomap,
 } from 'src/entities';
-import { Like, Repository, DataSource, QueryRunner } from 'typeorm';
+import { Like, Repository, DataSource } from 'typeorm';
 import { DataSourceService } from '../database/data-source';
 import { SapService } from './sap-rfc.service';
 
