@@ -63,6 +63,11 @@
 - material-request-items-uom.entity
 - material-automap.entity
 
+### Spec
+
+- app.controller.spec.ts
+- material-request.spec.ts
+
 ### Guards
 
 - auth.guard
@@ -88,6 +93,17 @@
 - 01.15 增加PM2佈署用組態
 - 01.21 建立與回靶Rule Table對應的TypeORM
 - 01.22 建立產生回靶基礎資料(MARA)功能
+- 02.04 建立AppController單元測試
+- 02.05 建立Component Codes單元測試
+- 02.05 建立Drawing Codes單元測試
+- 02.05 修改PM2參數，instances:2
+- 02.05 修改客供回靶產生邏輯(無背板規則)
+- 02.06 建立回靶Catalog
+- 02.07 修改產生回靶料號編碼SEQ取得方式(從RULE及LOV_DATA取值)
+- 02.07 修改取得回靶是否包含背板Hard Code寫法(從RULE及LOV_DATA取值)
+- 02.07 修改判斷需要產生回靶的方式(設定Flag:Y/N)
+- 02.07 修改判斷有無背板的屬性取得方式(從LOV_DATA取值)
+- 02.10 (pending)拿掉產生回靶料號Catalog判斷SB與T開頭判斷式，直接取(從RULE及LOV_DATA取值)
 
 ## Note
 

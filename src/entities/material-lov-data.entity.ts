@@ -23,4 +23,6 @@ export class MaterialLovData {
   attrV1?: string;
   @Column({ name: 'ATTR_V2' })
   attrV2?: string;
+  @Column({ name: 'ATTR_V3' })
+  attrV3?: string;
 }

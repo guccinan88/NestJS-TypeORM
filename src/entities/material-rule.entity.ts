@@ -52,4 +52,6 @@ export class MaterialRule {
     },
   })
   combinationFlag: boolean;
+  @Column({ name: 'GROUP_CODE' })
+  groupCode?: string;
 }

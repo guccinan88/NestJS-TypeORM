@@ -46,4 +46,6 @@ export class MaterialRequestFormItems {
   isDeleted?: string;
   @Column({ name: 'DELETED_MATERIAL' })
   deletedMaterial?: string;
+  @Column({ name: 'SOURCE_DATA' })
+  sourceData: string;
 }

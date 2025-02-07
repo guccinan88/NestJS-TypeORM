@@ -71,7 +71,43 @@ describe('MaterialRequestService', () => {
         .mockImplementation(() => {
           return Promise.resolve(result);
         });
-      expect(await materialRequestService.queryComponentCode()).toBe(result);
+      expect(await materialRequestService.queryComponentCode()).toMatchObject(
+        result,
+      );
+    });
+  });
+  describe('QueryDrawingCode', () => {
+    it('QueryFccDrawingCodes', async () => {
+      const result = [
+        {
+          newDrawingCode: 'FACX198XX6EZ01',
+          oldDrawingCode: '0198E-0',
+        },
+      ];
+      jest
+        .spyOn(materialRequestService, 'queryDrawingCode')
+        .mockImplementation(() => {
+          return Promise.resolve(result);
+        });
+      expect(
+        await materialRequestService.queryDrawingCode('F', 'C'),
+      ).toMatchObject(result);
+    });
+    it('QueryTemDrawingCodes', async () => {
+      const result = [
+        {
+          newDrawingCode: 'SRX19AX11DXXX5NZZW001',
+          oldDrawingCode: '0019C-2',
+        },
+      ];
+      jest
+        .spyOn(materialRequestService, 'queryDrawingCode')
+        .mockImplementation(() => {
+          return Promise.resolve(result);
+        });
+      expect(
+        await materialRequestService.queryDrawingCode('T', ''),
+      ).toMatchObject(result);
     });
   });
 });
