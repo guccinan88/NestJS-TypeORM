@@ -31,4 +31,6 @@ export class MaterialAutomap {
     },
   })
   enableFlag: boolean;
+  @Column({ name: 'ATTR_V1' })
+  attrV1: string;
 }

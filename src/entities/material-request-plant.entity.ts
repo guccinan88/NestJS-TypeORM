@@ -18,13 +18,13 @@ export class MaterialRequestPlant {
   @Column({ name: 'PRODUCT_UOM' })
   productUom?: string;
   @Column({ name: 'SALES_UOM' })
-  salesUom: string;
+  salesUom?: string;
   @Column({ name: 'MRP_CONTROLLER' })
-  mrpController: string;
+  mrpController?: string;
   @Column({ name: 'MRP_TYPE' })
-  mrpType: string;
+  mrpType?: string;
   @Column({ name: 'DEP_REQ_ID' })
-  depReqId: string;
+  depReqId?: string;
   @Column({
     name: 'WORK_SCHED_VIEW',
     type: 'varchar',
@@ -33,11 +33,11 @@ export class MaterialRequestPlant {
       from: (value: string) => value === 'Y',
     },
   })
-  workSchedView: boolean;
+  workSchedView?: boolean;
   @Column({ name: 'PRODPROF' })
-  prodprof: string;
+  prodprof?: string;
   @Column({ name: 'LOTSIZEKEY' })
-  lotsizekey: string;
+  lotsizekey?: string;
   @Column({
     name: 'IND_POST_TO_INSP_STOCK',
     type: 'varchar',
@@ -46,7 +46,7 @@ export class MaterialRequestPlant {
       from: (value: string) => value === 'Y',
     },
   })
-  indPostToInspStock: boolean;
+  indPostToInspStock?: boolean;
   @Column({
     name: 'SOURCELIST',
     type: 'varchar',
@@ -55,11 +55,11 @@ export class MaterialRequestPlant {
       from: (value: string) => value === 'Y',
     },
   })
-  sourcelist: boolean;
+  sourcelist?: boolean;
   @Column({ name: 'PURCHASE_ORDER_CONTENT' })
-  purchaseOrderContent: string;
+  purchaseOrderContent?: string;
   @Column({ name: 'DELYG_PLNT' })
-  delygPlnt: string;
+  delygPlnt?: string;
   @Column({ name: 'UPDATED_DATE' })
   updatedDate?: Date;
 }

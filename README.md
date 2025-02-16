@@ -72,6 +72,10 @@
 
 - auth.guard
 
+### Dto
+
+- create-sap-view-validation.dto.ts
+
 ## 修改紀錄
 
 ### 2024
@@ -103,7 +107,17 @@
 - 02.07 修改取得回靶是否包含背板Hard Code寫法(從RULE及LOV_DATA取值)
 - 02.07 修改判斷需要產生回靶的方式(設定Flag:Y/N)
 - 02.07 修改判斷有無背板的屬性取得方式(從LOV_DATA取值)
-- 02.10 (pending)拿掉產生回靶料號Catalog判斷SB與T開頭判斷式，直接取(從RULE及LOV_DATA取值)
+- 02.10 修改SourceData Flag:人工建立=>Manual，後端產生=>AutoMap
+- 02.10 material-automap.entity新增attrV1欄位屬性
+- 02.11 修正進入MATERIAL_REQUEST_CATALOG料號組成類型
+- 02.11 拿掉產生回靶料號Catalog判斷SB與T開頭判斷式，直接取Template Rule Catalog Code
+- 02.11 修正取得物料類型Hard Code的方式
+- 02.11 修改SAP_DATA對應的TypeORM欄位
+- 02.12 建立依照不同類型的靶材複製對應的SAP VIEW
+- 02.13 建立驗證AutoMap產生VIEW文件的物料類型規則表(Dto)
+- 02.13 修改AutoMap產生VIEW文件的判斷式(物料類型必須是包含在對應的VIEW裡)
+- 02.14 建立新增物料申請單的Unit Testing
+- 02.14 修正取圖號Unit Testing回傳結果格式
 
 ## Note
 
