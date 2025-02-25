@@ -156,4 +156,25 @@ export class MaterialRequestController {
       throw new CustomHttpException('申請單送出失敗', false);
     }
   }
+  @Get('generate-semifinished-materials')
+  async generateSemifinishedMaterials(
+    @Query('templateCode') templateCode: string,
+    @Query('materialId') materialId: string,
+  ) {
+    try {
+      const generateResult =
+        await this.materialRequestService.semifinishedMaterials(
+          templateCode,
+          materialId,
+        );
+      return {
+        success: true,
+        message: '中間料號產生成功',
+        data: generateResult,
+      };
+    } catch (error) {
+      console.error(error);
+      throw new CustomHttpException('查詢失敗', false);
+    }
+  }
 }

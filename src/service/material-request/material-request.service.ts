@@ -312,279 +312,27 @@ export class MaterialRequestService {
         });
         //產生回靶料號，等於Y代表有回靶
         if (queryReturnTargetLovData[0].attrV1 === 'Y' && validation) {
-          //取得判斷有無背板Flag
-          const queryNeedBackPlane = await this.materialAutomap.find({
-            where: {
-              templateCode: templateCode,
-              attrV1: 'BACK_PLANE',
-            },
-          });
-          const getAutoMapGroupCode = await queryNeedBackPlane.map(
-            (item) => item.formFild,
-          );
-          const queryBackPlaneRuleGroupCode =
-            await this.materialRuleRepository.find({
-              select: ['lovGroup'],
-              where: {
-                templateCode: templateCode,
-                catalogCode: getAutoMapGroupCode[0],
-              },
+          try {
+            await this.generateAutomapMaterials({
+              returnTargetType,
+              queryReturnTargetLovData,
+              templateCode,
+              materialCatalogToInsert,
+              materialItemsToInsert,
+              materialPlantToInsert,
+              createFormMasterId,
+              primaryPlant,
+              reason,
+              remarks,
+              weightUom,
+              baseUom,
+              validation,
+              transferPlant,
+              sapData,
             });
-          //取得產生回靶Template
-          const [{ lovGroup }] = queryBackPlaneRuleGroupCode;
-          const customerTargetBackplane = materialCatalogToInsert.find(
-            (entry) => entry.catalogGroup === lovGroup,
-          )?.catalogValue;
-          const queryReturnTargetTemplate =
-            customerTargetBackplane === 'R' &&
-            returnTargetType === 'CUSTOMER_TARGET'
-              ? `${returnTargetType}_R`
-              : returnTargetType;
-          const groupByReturnTargetType = await this.materialAutomap
-            .createQueryBuilder('ma')
-            .select('ma.typeKind')
-            .addSelect('ma.templateCode')
-            .addSelect('COUNT(ma.automapId)', 'targetTypeCount')
-            .where('ma.typeKind=:returnTargetType', {
-              returnTargetType: queryReturnTargetTemplate,
-            })
-            .groupBy('ma.typeKind')
-            .addGroupBy('ma.templateCode')
-            .getRawMany();
-          for (const maCode of groupByReturnTargetType) {
-            const targetMaterialIdSequenceResult =
-              await this.mssqlDataSource.queryMaterialIdCurrentSequence();
-            const targetMaterialIdSequence =
-              targetMaterialIdSequenceResult[0].CurrentValue;
-            //取Automap規則
-            const queryReturnTargetCodes = await this.materialAutomap.find({
-              where: {
-                typeKind: queryReturnTargetTemplate,
-                templateCode: maCode.ma_TEMPLATE_CODE,
-              },
-            });
-            //取Template需加入編碼的RULE
-            const queryTemplateRule = await this.materialRuleRepository.find({
-              where: {
-                templateCode: maCode.ma_TEMPLATE_CODE,
-                combinationFlag: true,
-              },
-            });
-            //取Template編碼的SEQ
-            const queryTemplateSeq = await this.materialRuleRepository.find({
-              where: {
-                templateCode: maCode.ma_TEMPLATE_CODE,
-              },
-            });
-            //取物料類型
-            const queryTemplateMaterialType =
-              await this.materialRuleRepository.find({
-                where: {
-                  templateCode: maCode.ma_TEMPLATE_CODE,
-                  lovGroup: 'MATERIAL_TYPE',
-                },
-              });
-            const [{ catalogCode }] = queryTemplateMaterialType;
-            const returnTargetMaterialType = queryReturnTargetCodes.find(
-              (item) => item.formFild === catalogCode,
-            )?.refDefaultValue;
-            //取AUTOMAP裡是CATALOG的欄位值
-            const getRefFieldCatalog = queryReturnTargetCodes
-              .filter(
-                (item) =>
-                  item.refField !== '' &&
-                  item.refSource === 'CATALOG' &&
-                  queryTemplateRule.some(
-                    (subItem) => subItem.catalogCode === item.formFild,
-                  ),
-              )
-              .map((item) => ({
-                itemSeq: queryTemplateRule.find(
-                  (subItem) => subItem.catalogCode === item.formFild,
-                )?.catalogSeq,
-                refField: item.refField,
-              }));
-            //取AUTOMAP裡是DEFAULT的欄位值
-            const getRefFieldDefault = queryReturnTargetCodes
-              .filter(
-                (item) =>
-                  item.refSource === 'DEFAULT' &&
-                  queryTemplateRule.some(
-                    (subItem) => subItem.catalogCode === item.formFild,
-                  ),
-              )
-              .map((item) => ({
-                itemSeq: queryTemplateRule.find(
-                  (subItem) => subItem.catalogCode === item.formFild,
-                )?.catalogSeq,
-                refField: item.refDefaultValue,
-              }));
-            const returnTargetMaterialDatas = getRefFieldCatalog.map((item) => {
-              const match = materialCatalogToInsert.find(
-                (entry) => entry.catalogCode === item.refField,
-              );
-              return match
-                ? [
-                    { ...item, refField: match.catalogValue },
-                    ...getRefFieldDefault,
-                  ]
-                : item;
-            });
-            const returnTargetResult = returnTargetMaterialDatas
-              .flat()
-              //參數:當前元素,當前元素索引,原始陣列
-              .filter(
-                (value, index, self) =>
-                  index === self.findIndex((r) => r.itemSeq === value.itemSeq),
-              )
-              .sort((a, b) => a.itemSeq - b.itemSeq)
-              .map((item) => item.refField)
-              .join('');
-            materialItemsToInsert.push({
-              materialId: targetMaterialIdSequence,
-              masterId: createFormMasterId,
-              materialNo: returnTargetResult,
-              templateCode: templateCode,
-              materialType: returnTargetMaterialType,
-              primaryPlant: primaryPlant,
-              materialDescription: queryReturnTargetLovData[0].lovDescription,
-              reason: reason,
-              remarks: remarks,
-              weightUom: weightUom,
-              baseUom: baseUom,
-              validation: validation,
-              transferPlant: transferPlant,
-              sourceData: 'AutoMap',
-            });
-
-            //產生回靶Catalog
-            for (const catalogCodes of queryReturnTargetCodes) {
-              //Template Rule的類型是Catalog才做物料編碼
-              if (catalogCodes.formSource === 'CATALOG') {
-                const queryMaterialRule =
-                  await this.materialRuleRepository.find({
-                    where: {
-                      catalogCode: catalogCodes.formFild,
-                    },
-                  });
-                const lovGroup = queryMaterialRule
-                  .flat()
-                  .find(
-                    (item) => item.catalogCode === catalogCodes.formFild,
-                  )?.lovGroup;
-                const inputMethod = queryMaterialRule
-                  .flat()
-                  .find(
-                    (item) => item.catalogCode === catalogCodes.formFild,
-                  )?.inputMethod;
-                const queryMaterialLovData = await this.materialLovData.find({
-                  where: {
-                    lovGroup: lovGroup,
-                    lovCode: catalogCodes.refDefaultValue,
-                  },
-                });
-                const lovDescription = queryMaterialLovData
-                  .flat()
-                  .find((item) => item.lovGroup === lovGroup)?.lovDescription;
-                materialCatalogToInsert.push({
-                  materialId: targetMaterialIdSequence,
-                  masterId: createFormMasterId,
-                  catalogGroup: lovGroup,
-                  catalogCode: catalogCodes.formFild,
-                  catalogSeq: queryTemplateSeq.find(
-                    (item) => item.catalogCode === catalogCodes.formFild,
-                  )?.catalogSeq,
-                  catalogValue:
-                    catalogCodes.refDefaultValue ||
-                    materialCatalogToInsert.find(
-                      (item) => item.catalogCode === catalogCodes.refField,
-                    )?.catalogValue,
-                  inputMethod: inputMethod,
-                  catalogDescription:
-                    lovDescription ||
-                    materialCatalogToInsert.find(
-                      (item) => item.catalogCode === catalogCodes.refField,
-                    )?.catalogDescription,
-                });
-              }
-            }
-            //建立回靶料號SAP文件
-            try {
-              const sapViewType = queryReturnTargetCodes.find(
-                (item) => item.formSource === 'SAP_DATA',
-              )?.refSource;
-              //判斷要建立哪一類型的VIEW，取出對應的物料類型
-              const validSapViewMaterialTypes =
-                sapViewType === 'SD'
-                  ? Object.values(SDViewMaterialType).filter(
-                      (value) => typeof value === 'string',
-                    )
-                  : Object.values(MRPViewMaterialType).filter(
-                      (value) => typeof value === 'string',
-                    );
-              //客供回靶SD，判斷物料類型是否包含在SD VIEW
-              if (
-                sapViewType === 'SD' &&
-                validSapViewMaterialTypes.includes(returnTargetMaterialType)
-              ) {
-                const { salesUom, delygPlnt } = sapData;
-                materialPlantToInsert.push({
-                  materialId: targetMaterialIdSequence,
-                  plant: primaryPlant,
-                  salesUom: salesUom,
-                  delygPlnt: delygPlnt,
-                });
-              }
-              //租賃回靶MRP，判斷物料類型是否包含在MRP VIEW
-              else if (
-                sapViewType === 'MRP' &&
-                validSapViewMaterialTypes.includes(returnTargetMaterialType)
-              ) {
-                const {
-                  procType,
-                  purUom,
-                  purGroup,
-                  productUom,
-                  mrpType,
-                  depReqId,
-                  workSchedView,
-                  prodprof,
-                  lotsizekey,
-                  indPostToInspStock,
-                  sourcelist,
-                  purchaseOrderContent,
-                } = sapData;
-                const mrpController = await sapData?.mrpController?.find(
-                  (item) => primaryPlant === item.plant,
-                )?.controller;
-                materialPlantToInsert.push({
-                  materialId: targetMaterialIdSequence,
-                  plant: primaryPlant,
-                  procType: procType,
-                  purUom: purUom,
-                  purGroup: purGroup,
-                  productUom: productUom,
-                  mrpController: mrpController,
-                  mrpType: mrpType,
-                  depReqId: depReqId,
-                  workSchedView: workSchedView,
-                  prodprof: prodprof,
-                  lotsizekey: lotsizekey,
-                  indPostToInspStock: indPostToInspStock,
-                  sourcelist: sourcelist,
-                  purchaseOrderContent: purchaseOrderContent,
-                });
-                //物料類型與SAP VIEW無法匹配時候觸發
-              } else {
-                throw new Error();
-              }
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (error) {
-              return {
-                success: false,
-                message: 'AutoMap產生VIEW物料類型錯誤',
-              };
-            }
+          } catch (error) {
+            console.error(error);
+            throw new CustomHttpException('AutoMap料號產生失敗', false);
           }
         }
         //INSERT DATA TO DB
@@ -632,6 +380,402 @@ export class MaterialRequestService {
       console.error(error);
       await queryRunner.rollbackTransaction();
       throw new CustomHttpException('建立失敗', false);
+    }
+  }
+
+  async semifinishedMaterials(templateCode, materialId) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    const materialItemsToInsert: MaterialRequestFormItems[] = [];
+    const materialCatalogToInsert: MaterialRequestCatalog[] = [];
+    const queryMaterialItem = await this.materialRequestFormItems.findOne({
+      where: {
+        materialId: materialId,
+      },
+    });
+    const queryCreatedMaterialCatalogs = await this.materialRequestCatalog
+      .createQueryBuilder('mrc')
+      .where('mrc.MATERIAL_ID = :materialId', { materialId })
+      .orderBy('mrc.CATALOG_SEQ', 'ASC')
+      .getRawMany();
+    const specialCodeValue = queryCreatedMaterialCatalogs.find((item) =>
+      item.mrc_CATALOG_GROUP.startsWith('SPECIAL_CODE1'),
+    )?.mrc_CATALOG_VALUE;
+    const {
+      masterId,
+      reason,
+      remarks,
+      weightUom,
+      baseUom,
+      primaryPlant,
+      transferPlant,
+    } = queryMaterialItem;
+    try {
+      await this.generateAutomapMaterials({
+        queryCreatedMaterialCatalogs,
+        materialCatalogToInsert,
+        materialItemsToInsert,
+        specialCodeValue,
+        templateCode,
+        primaryPlant,
+        createFormMasterId: masterId,
+        reason,
+        remarks,
+        weightUom,
+        baseUom,
+        transferPlant,
+      });
+      await queryRunner.startTransaction();
+      await queryRunner.manager.insert(
+        MaterialRequestFormItems,
+        materialItemsToInsert,
+      );
+      await queryRunner.manager.insert(
+        MaterialRequestCatalog,
+        materialCatalogToInsert,
+      );
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      console.error(error);
+      throw new CustomHttpException('AutoMap料號產生失敗', false);
+    }
+  }
+  //產生AutoMap料號:回靶、中間料號
+  async generateAutomapMaterials({
+    returnTargetType = '',
+    specialCodeValue = '',
+    queryCreatedMaterialCatalogs = [],
+    queryReturnTargetLovData = [],
+    templateCode,
+    materialItemsToInsert,
+    materialCatalogToInsert,
+    materialPlantToInsert = [],
+    createFormMasterId,
+    primaryPlant,
+    reason,
+    remarks,
+    weightUom,
+    baseUom,
+    validation = 'N',
+    transferPlant,
+    sapData = {},
+  }) {
+    //取得判斷有無背板Flag
+    console.log(queryCreatedMaterialCatalogs);
+    const queryAutoMapCatalog = await this.materialAutomap.find({
+      where: {
+        templateCode: templateCode,
+        attrV1: 'BACK_PLANE',
+      },
+    });
+    const getAutoMapGroupCode = await queryAutoMapCatalog.map(
+      (item) => item.formFild,
+    );
+    const queryBackPlaneRuleGroupCode = await this.materialRuleRepository.find({
+      select: ['lovGroup'],
+      where: {
+        templateCode: templateCode,
+        catalogCode: getAutoMapGroupCode[0],
+      },
+    });
+    //取得產生回靶Template
+    const [{ lovGroup }] = queryBackPlaneRuleGroupCode;
+    const autoMapBackplane = materialCatalogToInsert.find(
+      (entry) => entry.catalogGroup === lovGroup,
+    )?.catalogValue;
+    //如果收到的參數值是回靶，就接著判斷是否有背板，如果參數值不是回靶就拿特徵碼
+    const queryTypeKindTemplate = returnTargetType
+      ? autoMapBackplane === 'R' && returnTargetType === 'CUSTOMER_TARGET'
+        ? `${returnTargetType}_R`
+        : returnTargetType
+      : specialCodeValue;
+    const groupByAutoMapType = await this.materialAutomap
+      .createQueryBuilder('ma')
+      .select('ma.typeKind')
+      .addSelect('ma.templateCode')
+      .addSelect('ma.itemSeq')
+      .addSelect('COUNT(ma.automapId)', 'targetTypeCount')
+      .where('ma.typeKind=:autoMapType', {
+        autoMapType: queryTypeKindTemplate,
+      })
+      .groupBy('ma.typeKind')
+      .addGroupBy('ma.templateCode')
+      .addGroupBy('ma.itemSeq')
+      .getRawMany();
+    for (const maCode of groupByAutoMapType) {
+      const autoMapMaterialIdSequenceResult =
+        await this.mssqlDataSource.queryMaterialIdCurrentSequence();
+      const autoMapMaterialIdSequence =
+        autoMapMaterialIdSequenceResult[0].CurrentValue;
+      //取Automap規則
+      const queryAutoMapCodes = await this.materialAutomap.find({
+        where: {
+          typeKind: queryTypeKindTemplate,
+          templateCode: maCode.ma_TEMPLATE_CODE,
+          itemSeq: maCode.ma_ITEM_SEQ,
+        },
+      });
+      //取Template需加入編碼的RULE
+      const queryTemplateRule = await this.materialRuleRepository.find({
+        where: {
+          templateCode: maCode.ma_TEMPLATE_CODE,
+          combinationFlag: true,
+        },
+      });
+      //取Template編碼的SEQ
+      const queryTemplateSeq = await this.materialRuleRepository.find({
+        where: {
+          templateCode: maCode.ma_TEMPLATE_CODE,
+        },
+      });
+      //取物料類型
+      const queryTemplateMaterialType = await this.materialRuleRepository.find({
+        where: {
+          templateCode: maCode.ma_TEMPLATE_CODE,
+          lovGroup: 'MATERIAL_TYPE',
+        },
+      });
+      const [{ catalogCode }] = queryTemplateMaterialType;
+      const autoMapMaterialType = queryAutoMapCodes.find(
+        (item) => item.formFild === catalogCode,
+      )?.refDefaultValue;
+      //取AUTOMAP裡是CATALOG的欄位值
+      const getRefFieldCatalog = queryAutoMapCodes
+        .filter(
+          (item) =>
+            item.refField !== '' &&
+            item.refSource === 'CATALOG' &&
+            queryTemplateRule.some(
+              (subItem) => subItem.catalogCode === item.formFild,
+            ),
+        )
+        .map((item) => ({
+          itemSeq: queryTemplateRule.find(
+            (subItem) => subItem.catalogCode === item.formFild,
+          )?.catalogSeq,
+          refField: item.refField,
+        }));
+      //取AUTOMAP裡是DEFAULT的欄位值
+      const getRefFieldDefault = queryAutoMapCodes
+        .filter(
+          (item) =>
+            item.refSource === 'DEFAULT' &&
+            queryTemplateRule.some(
+              (subItem) => subItem.catalogCode === item.formFild,
+            ),
+        )
+        .map((item) => ({
+          itemSeq: queryTemplateRule.find(
+            (subItem) => subItem.catalogCode === item.formFild,
+          )?.catalogSeq,
+          refField: item.refDefaultValue,
+        }));
+      //根據TYPE_KIND設定與觸發條件走不同的AutoMap產生料號邏輯
+      const autoMapMaterialDatas = getRefFieldCatalog.map((item) => {
+        const match = returnTargetType
+          ? //回靶
+            materialCatalogToInsert.find(
+              (entry) => entry.catalogCode === item.refField,
+            )
+          : //中間料號
+            queryCreatedMaterialCatalogs.find(
+              (entry) => entry.mrc_CATALOG_CODE === item.refField,
+            );
+        return match
+          ? [
+              {
+                ...item,
+                refField: returnTargetType
+                  ? //回靶的話取catalogValue，中間料號取mrc_CATALOG_VALUE
+                    match.catalogValue
+                  : match.mrc_CATALOG_VALUE,
+              },
+              ...getRefFieldDefault,
+            ]
+          : item;
+      });
+      const autoMapSeqResult = autoMapMaterialDatas
+        .flat()
+        //參數:當前元素,當前元素索引,原始陣列
+        .filter(
+          (value, index, self) =>
+            index === self.findIndex((r) => r.itemSeq === value.itemSeq),
+        )
+        .sort((a, b) => a.itemSeq - b.itemSeq)
+        .map((item) => item.refField)
+        .join('');
+      materialItemsToInsert.push({
+        materialId: autoMapMaterialIdSequence,
+        masterId: createFormMasterId,
+        materialNo: autoMapSeqResult,
+        templateCode: templateCode,
+        materialType: autoMapMaterialType,
+        primaryPlant: primaryPlant,
+        materialDescription: queryReturnTargetLovData[0]?.lovDescription,
+        reason: reason,
+        remarks: remarks,
+        weightUom: weightUom,
+        baseUom: baseUom,
+        validation: validation,
+        transferPlant: transferPlant,
+        sourceData: 'AutoMap',
+      });
+
+      //產生回靶Catalog
+      for (const catalogCodes of queryAutoMapCodes) {
+        //Template Rule的類型是Catalog才做物料編碼
+        if (catalogCodes.formSource === 'CATALOG') {
+          const queryMaterialRule = await this.materialRuleRepository.find({
+            where: {
+              catalogCode: catalogCodes.formFild,
+            },
+          });
+          const lovGroup = queryMaterialRule
+            .flat()
+            .find(
+              (item) => item.catalogCode === catalogCodes.formFild,
+            )?.lovGroup;
+          const inputMethod = queryMaterialRule
+            .flat()
+            .find(
+              (item) => item.catalogCode === catalogCodes.formFild,
+            )?.inputMethod;
+          const queryMaterialLovData = await this.materialLovData.find({
+            where: {
+              lovGroup: lovGroup,
+              lovCode: catalogCodes.refDefaultValue,
+            },
+          });
+          const lovDescription = queryMaterialLovData
+            .flat()
+            .find((item) => item.lovGroup === lovGroup)?.lovDescription;
+          materialCatalogToInsert.push({
+            materialId: autoMapMaterialIdSequence,
+            masterId: createFormMasterId,
+            catalogGroup: lovGroup,
+            catalogCode: catalogCodes.formFild,
+            catalogSeq: queryTemplateSeq.find(
+              (item) => item.catalogCode === catalogCodes.formFild,
+            )?.catalogSeq,
+            catalogValue:
+              catalogCodes.refDefaultValue ||
+              (returnTargetType
+                ? materialCatalogToInsert.find(
+                    (item) => item.catalogCode === catalogCodes.refField,
+                  )?.catalogValue
+                : queryCreatedMaterialCatalogs.find(
+                    (item) => item.mrc_CATALOG_CODE === catalogCodes.refField,
+                  )?.mrc_CATALOG_VALUE),
+            inputMethod: inputMethod,
+            catalogDescription:
+              lovDescription || returnTargetType
+                ? materialCatalogToInsert.find(
+                    (item) => item.catalogCode === catalogCodes.refField,
+                  )?.catalogDescription
+                : queryCreatedMaterialCatalogs.find(
+                    (item) => item.mrc_CATALOG_CODE === catalogCodes.refField,
+                  )?.mrc_CATALOG_DESCRIPTION,
+          });
+        }
+      }
+      //建立回靶料號SAP文件(回靶才進入這段)
+      if (autoMapMaterialType) {
+        try {
+          const sapViewType = queryAutoMapCodes.find(
+            (item) => item.formSource === 'SAP_DATA',
+          )?.refSource;
+          //判斷要建立哪一類型的VIEW，取出對應的物料類型
+          const validSapViewMaterialTypes =
+            sapViewType === 'SD'
+              ? Object.values(SDViewMaterialType).filter(
+                  (value) => typeof value === 'string',
+                )
+              : Object.values(MRPViewMaterialType).filter(
+                  (value) => typeof value === 'string',
+                );
+          //客供回靶SD，判斷物料類型是否包含在SD VIEW
+          if (
+            sapViewType === 'SD' &&
+            validSapViewMaterialTypes.includes(autoMapMaterialType)
+          ) {
+            const { salesUom, delygPlnt } = sapData as {
+              salesUom: string;
+              delygPlnt: string;
+            };
+            materialPlantToInsert.push({
+              materialId: autoMapMaterialIdSequence,
+              plant: primaryPlant,
+              salesUom: salesUom,
+              delygPlnt: delygPlnt,
+            });
+          }
+          //租賃回靶MRP，判斷物料類型是否包含在MRP VIEW
+          else if (
+            sapViewType === 'MRP' &&
+            validSapViewMaterialTypes.includes(autoMapMaterialType)
+          ) {
+            const {
+              procType,
+              purUom,
+              purGroup,
+              productUom,
+              mrpType,
+              depReqId,
+              workSchedView,
+              prodprof,
+              lotsizekey,
+              indPostToInspStock,
+              sourcelist,
+              purchaseOrderContent,
+            } = sapData as {
+              procType: string;
+              purUom: string;
+              purGroup: string;
+              productUom: string;
+              mrpType: string;
+              depReqId: string;
+              workSchedView: string;
+              prodprof: string;
+              lotsizekey: string;
+              indPostToInspStock: boolean;
+              sourcelist: string[];
+              purchaseOrderContent: string[];
+            };
+            //mrpController屬性可能存在或可能不存在，如果存在類型會是Array並且有plant與controller兩個屬性
+            const mrpController = await (
+              sapData as {
+                mrpController?: { plant: string; controller: string }[];
+              }
+            )?.mrpController?.find((item) => primaryPlant === item.plant)
+              ?.controller;
+            materialPlantToInsert.push({
+              materialId: autoMapMaterialIdSequence,
+              plant: primaryPlant,
+              procType: procType,
+              purUom: purUom,
+              purGroup: purGroup,
+              productUom: productUom,
+              mrpController: mrpController,
+              mrpType: mrpType,
+              depReqId: depReqId,
+              workSchedView: workSchedView,
+              prodprof: prodprof,
+              lotsizekey: lotsizekey,
+              indPostToInspStock: indPostToInspStock,
+              sourcelist: sourcelist,
+              purchaseOrderContent: purchaseOrderContent,
+            });
+            //物料類型與SAP VIEW無法匹配時候觸發
+          } else {
+            throw new Error();
+          }
+        } catch (error) {
+          console.error(error);
+          return {
+            success: false,
+            message: 'AutoMap產生VIEW物料類型錯誤',
+          };
+        }
+      }
     }
   }
 
