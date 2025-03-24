@@ -17,10 +17,11 @@
 - mssql
 - pg
 - dotenv
+- axios
 
 ## material-request-api
 
-### Controller
+### HTTP METHOD
 
 - **GET** /template-code
 - **GET** /template-items
@@ -32,6 +33,7 @@
 - **GET** /lov-list
 - **GET** /submit-form
 - **GET** /query-form
+- **GET** /generate-semifinished-materials
 - **POST** /create-form
 - **PATCH** /edit-form
 - **DELETE** /delete-form
@@ -43,10 +45,15 @@
 
 ### Service
 
-- auth-service
-- material-request
+- auth.service
+- material-request.service
 - data-source
 - sap-rfc
+- user.service
+
+### Controller
+
+- material-request
 
 ### Entity
 
@@ -118,6 +125,53 @@
 - 02.13 修改AutoMap產生VIEW文件的判斷式(物料類型必須是包含在對應的VIEW裡)
 - 02.14 建立新增物料申請單的Unit Testing
 - 02.14 修正取圖號Unit Testing回傳結果格式
+- 02.20 AutoMap料號重構成獨立區塊
+- 02.21 建立產生中間料號API(@Get('generate-semifinished-materials'))
+- 02.21 新增TypeScript的ESLint規則擴展
+- 02.21 調整Catalog TypeORM Id欄位
+- 02.21 可能為空的參數加入型別斷言
+- 02.24 修正中間料號取得MARA料號查詢只查詢到一筆紀錄問題
+- 02.24 修改AutoMap一開始命名為回靶相關變數
+- 02.25 調整判斷回靶有無背板程式邏輯(加上特徵碼判斷)
+- 02.25 修改取得Catalog查詢條件(加入ITEM_SEQ)
+- 02.25 修改取得中間料號查詢條件(多加一組GroupBy條件)
+- 02.25 修改一些呼叫AutoMap參數
+- 02.26 修正取得中間料號Description錯誤
+- 02.26 修正取得中間料號Catalog錯誤
+- 02.26 修改中間料號AutoMap產生後的物料狀態
+- 02.27 修改semifinishedMaterials函數參數
+- 02.27 拿掉取得特徵碼Hard Code方式
+- 02.27 修改material-template.entity(加入GEN_SEMI_FINISHED欄位對應的屬性)
+- 03.03 material-request-form-items.entity加入新欄位(isSemiFinished)
+- 03.03 Details新增判斷料號是否要顯示產生中間料號邏輯
+- 03.03 Details新增判斷料號是否為中間料號
+- 03.03 修改material-template.entity(拿掉GEN_SEMI_FINISHED欄位對應的屬性)
+- 03.04 修改AutoMap所產生中間料號的物料說明
+- 03.04 修改中間料號自動帶入物料類型
+- 03.05 修正取得AutoMap與成品料號對應的特徵碼，資料全上後出現Bug
+- 03.05 增加中間料號的目標料號有無背板判斷邏輯
+- 03.05 修改判斷有無回靶變數
+- 03.06 修正從資料庫取得申請單列表時差問題
+- 03.06 修改取得料號建立時間來源(MRFM=>MRFI)
+- 03.10 建立自動產生物料說明模組(未完成)
+- 03.12 修改TypeORM對應欄位(MaterialLovData、MaterialRule)
+- 03.13 新增TypeORM對應欄位(MaterialLovData)
+- 03.13 將自動產生物料說明功能獨立區塊
+- 03.17 啟動AuthGuard機制
+- 03.17 帶入Public Key 解密Token (pubkey.pem)
+- 03.17 加入解密程式碼
+- 03.18 新增簽核用的Service、Controller
+- 03.18 修改產生中間料號單據狀態變為狀態碼"P"程式碼
+- 03.20 調整Permission驗證到API路由
+- 03.20 修改TypeORM 結構(material-rule.entity.ts)
+- 03.21 新增找不到工號出現Type Error卡控程式碼
+- 03.21 新增供前端顯示簽核狀態API
+- 03.21 新增申請者、部門主管、料號小組所屬表單
+- 03.21 新增EMP、DEPT對應的Entity
+- 03.24 增加單位主管申請單可視度卡控(清單不顯示草稿與作廢單據)
+- 03.24 增加料號小組申請單可視度卡控(清單不顯示草稿與作廢單據)
+- 03.24 開發區調整TypeORM版本
+- 03.24 增加從Permission API取得結果是undifined的錯誤處理
 
 ## Note
 

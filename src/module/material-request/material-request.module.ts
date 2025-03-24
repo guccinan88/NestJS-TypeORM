@@ -18,6 +18,10 @@ import {
 import { DataSourceService } from 'src/service/database/data-source';
 import { MaterialRequestService } from 'src/service/material-request/material-request.service';
 import { SapServiceModule } from './sap-rfc.module';
+import { UserModule } from './user.module';
+import { UserService } from 'src/service/auth/user.service';
+import { AuthGuard } from 'src/guards/auth/auth.guard';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -40,6 +44,8 @@ import { SapServiceModule } from './sap-rfc.module';
       [FccDrawingCode, TemDrawingCode, ComponentCode],
       'pgConnection',
     ),
+    UserModule,
+    AuthModule,
   ],
   providers: [MaterialRequestService, DataSourceService],
   controllers: [MaterialRequestController],

@@ -15,16 +15,18 @@ import {
   MaterialRequestPlant,
   MaterialRequestItemsUom,
   MaterialAutomap,
+  EmpAll,
 } from 'src/entities';
-import { Like, Repository, DataSource } from 'typeorm';
+import { Like, Repository, DataSource, In } from 'typeorm';
 import { DataSourceService } from '../database/data-source';
-import { SapService } from './sap-rfc.service';
+// import { SapService } from './sap-rfc.service';
 import {
   MRPViewMaterialType,
   SDViewMaterialType,
   PurchaseType,
 } from 'src/dto/create-sap-view-validation.dto';
-
+import { UserService } from '../auth/user.service';
+import { stat } from 'fs';
 @Injectable()
 export class MaterialRequestService {
   constructor(
@@ -54,7 +56,8 @@ export class MaterialRequestService {
     private readonly temDrawingCode: Repository<TemDrawingCode>,
     @InjectRepository(ComponentCode, 'pgConnection')
     private readonly componentCode: Repository<ComponentCode>,
-    private readonly sapService: SapService,
+    // private readonly sapService: SapService,
+    private readonly userService: UserService,
   ) {}
 
   async queryTemplateCodeAll(): Promise<any> {
@@ -86,6 +89,7 @@ export class MaterialRequestService {
           'enableFlag',
           'mustFlag',
           'combinationFlag',
+          'descriptionSeq',
         ],
       });
 
@@ -101,6 +105,7 @@ export class MaterialRequestService {
                 'lovCode',
                 'lovDescription',
                 'parentLovValue',
+                'descriptionCombination',
                 'enableFlag',
               ],
             });
@@ -143,9 +148,10 @@ export class MaterialRequestService {
       select: ['componentCode', 'componentItemNumber', 'wtRate', 'atRate'],
     });
   }
-  async createMaterialRequestForm(createFormDto) {
+  async createMaterialRequestForm(createFormDto, { jwtCookie }) {
     const queryRunner = this.dataSource.createQueryRunner();
     try {
+      const userInfo = await this.userService.getJwtVerify({ jwtCookie });
       const { masterId } = createFormDto;
       const materialMasterToInsert: MaterialRequestFormMaster[] = [];
       const materialItemsToInsert: MaterialRequestFormItems[] = [];
@@ -159,8 +165,8 @@ export class MaterialRequestService {
         : queryMaterialRequestCurrentSequenceResult[0].CurrentValue;
       if (!masterId) {
         //Fake User Data
-        const userId = 'S999';
-        const userName = 'Test_User';
+        const userId = (userInfo as any).workerNumber;
+        const userName = (userInfo as any).name;
         materialMasterToInsert.push({
           masterId: createFormMasterId,
           userId: userId,
@@ -311,7 +317,7 @@ export class MaterialRequestService {
           },
         });
         //產生回靶料號，等於Y代表有回靶
-        if (queryReturnTargetLovData[0].attrV1 === 'Y' && validation) {
+        if (queryReturnTargetLovData[0]?.attrV1 === 'Y' && validation) {
           try {
             await this.generateAutomapMaterials({
               returnTargetType,
@@ -322,12 +328,12 @@ export class MaterialRequestService {
               materialPlantToInsert,
               createFormMasterId,
               primaryPlant,
-              reason,
-              remarks,
+              reason: '回靶料號',
+              remarks: 'AutoMap產生料號',
               weightUom,
               baseUom,
-              validation,
               transferPlant,
+              validation,
               sapData,
             });
           } catch (error) {
@@ -383,7 +389,7 @@ export class MaterialRequestService {
     }
   }
 
-  async semifinishedMaterials(templateCode, materialId) {
+  async semifinishedMaterials(materialId) {
     const queryRunner = this.dataSource.createQueryRunner();
     const materialItemsToInsert: MaterialRequestFormItems[] = [];
     const materialCatalogToInsert: MaterialRequestCatalog[] = [];
@@ -392,37 +398,59 @@ export class MaterialRequestService {
         materialId: materialId,
       },
     });
-    const queryCreatedMaterialCatalogs = await this.materialRequestCatalog
-      .createQueryBuilder('mrc')
-      .where('mrc.MATERIAL_ID = :materialId', { materialId })
-      .orderBy('mrc.CATALOG_SEQ', 'ASC')
-      .getRawMany();
-    const specialCodeValue = queryCreatedMaterialCatalogs.find((item) =>
-      item.mrc_CATALOG_GROUP.startsWith('SPECIAL_CODE1'),
-    )?.mrc_CATALOG_VALUE;
     const {
+      templateCode,
       masterId,
-      reason,
-      remarks,
       weightUom,
       baseUom,
       primaryPlant,
       transferPlant,
     } = queryMaterialItem;
+    console.log(masterId);
+    //Call簽核模組，變更表單狀態碼
+    try {
+      await this.userService.signatureForm({
+        request: { masterId },
+        statusCode: 'P',
+      });
+    } catch (error) {
+      throw new CustomHttpException('申請單變更為產生中間料號狀態失敗', false);
+    }
+    //取得產生中間料號的目標成品料號
+    const queryCreatedMaterialCatalogs = await this.materialRequestCatalog
+      .createQueryBuilder('mrc')
+      .where('mrc.MATERIAL_ID = :materialId', { materialId })
+      .orderBy('mrc.CATALOG_SEQ', 'ASC')
+      .getRawMany();
+    //取得特徵碼1
+    const specialCodeValue = queryCreatedMaterialCatalogs.find((item) =>
+      item.mrc_CATALOG_GROUP.startsWith('SPECIAL_CODE1'),
+    )?.mrc_CATALOG_VALUE;
+    //產生中間料號目標料號有無背板
+    const materialBakcPlane = queryCreatedMaterialCatalogs.find((item) =>
+      item.mrc_CATALOG_GROUP.startsWith('PRODUCT2'),
+    )?.mrc_CATALOG_VALUE;
+    // const { masterId, weightUom, baseUom, primaryPlant, transferPlant } =
+    //   queryMaterialItem;
     try {
       await this.generateAutomapMaterials({
         queryCreatedMaterialCatalogs,
         materialCatalogToInsert,
         materialItemsToInsert,
-        specialCodeValue,
+        specialCodeValue:
+          materialBakcPlane === 'R'
+            ? `${specialCodeValue}_R`
+            : specialCodeValue,
         templateCode,
         primaryPlant,
         createFormMasterId: masterId,
-        reason,
-        remarks,
+        reason: '中間料號',
+        remarks: 'AutoMap產生料號',
         weightUom,
         baseUom,
         transferPlant,
+        isSemiFinished: true,
+        materialId,
       });
       await queryRunner.startTransaction();
       await queryRunner.manager.insert(
@@ -435,7 +463,6 @@ export class MaterialRequestService {
       );
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error(error);
       throw new CustomHttpException('AutoMap料號產生失敗', false);
     }
   }
@@ -455,12 +482,13 @@ export class MaterialRequestService {
     remarks,
     weightUom,
     baseUom,
-    validation = 'N',
     transferPlant,
+    validation = false,
+    isSemiFinished = false,
     sapData = {},
+    materialId = '',
   }) {
     //取得判斷有無背板Flag
-    console.log(queryCreatedMaterialCatalogs);
     const queryAutoMapCatalog = await this.materialAutomap.find({
       where: {
         templateCode: templateCode,
@@ -569,6 +597,7 @@ export class MaterialRequestService {
           )?.catalogSeq,
           refField: item.refDefaultValue,
         }));
+
       //根據TYPE_KIND設定與觸發條件走不同的AutoMap產生料號邏輯
       const autoMapMaterialDatas = getRefFieldCatalog.map((item) => {
         const match = returnTargetType
@@ -603,24 +632,57 @@ export class MaterialRequestService {
         .sort((a, b) => a.itemSeq - b.itemSeq)
         .map((item) => item.refField)
         .join('');
+      //自動產生AutoMap物料說明
+      const autoMaplovCodes = await Promise.all(
+        queryAutoMapCodes.map(async (catalogCodes) => {
+          const queryLovCodesResult =
+            catalogCodes.refDefaultValue ||
+            (returnTargetType
+              ? materialCatalogToInsert.find(
+                  (item) => item.catalogCode === catalogCodes.refField,
+                )?.catalogValue
+              : queryCreatedMaterialCatalogs.find(
+                  (item) => item.mrc_CATALOG_CODE === catalogCodes.refField,
+                )?.mrc_CATALOG_VALUE);
+          const querycatalogGroups = await this.materialRuleRepository.find({
+            where: {
+              catalogCode: catalogCodes.formFild,
+            },
+          });
+          const lovGroup = querycatalogGroups
+            .flat()
+            .find(
+              (item) => item.catalogCode === catalogCodes.formFild,
+            )?.lovGroup;
+          return {
+            lovGroup,
+            lovCode: queryLovCodesResult,
+          };
+        }),
+      );
+      const materialDescription = await this.autoGenerateMaterialDescription({
+        templateCode: maCode.ma_TEMPLATE_CODE,
+        catalogCode: autoMaplovCodes,
+      });
       materialItemsToInsert.push({
         materialId: autoMapMaterialIdSequence,
         masterId: createFormMasterId,
         materialNo: autoMapSeqResult,
-        templateCode: templateCode,
+        templateCode: maCode.ma_TEMPLATE_CODE,
         materialType: autoMapMaterialType,
         primaryPlant: primaryPlant,
-        materialDescription: queryReturnTargetLovData[0]?.lovDescription,
+        materialDescription:
+          materialDescription || 'No Auto Generate Description',
         reason: reason,
         remarks: remarks,
         weightUom: weightUom,
         baseUom: baseUom,
         validation: validation,
         transferPlant: transferPlant,
-        sourceData: 'AutoMap',
+        sourceData: returnTargetType ? 'ReturnTargetCode' : 'SemiCode',
+        isSemiFinished: isSemiFinished,
       });
-
-      //產生回靶Catalog
+      //產生AutoMap Catalog
       for (const catalogCodes of queryAutoMapCodes) {
         //Template Rule的類型是Catalog才做物料編碼
         if (catalogCodes.formSource === 'CATALOG') {
@@ -667,18 +729,18 @@ export class MaterialRequestService {
                   )?.mrc_CATALOG_VALUE),
             inputMethod: inputMethod,
             catalogDescription:
-              lovDescription || returnTargetType
-                ? materialCatalogToInsert.find(
-                    (item) => item.catalogCode === catalogCodes.refField,
-                  )?.catalogDescription
-                : queryCreatedMaterialCatalogs.find(
-                    (item) => item.mrc_CATALOG_CODE === catalogCodes.refField,
-                  )?.mrc_CATALOG_DESCRIPTION,
+              lovDescription ||
+              materialCatalogToInsert.find(
+                (item) => item.catalogCode === catalogCodes.refField,
+              )?.catalogDescription ||
+              queryCreatedMaterialCatalogs.find(
+                (item) => item.mrc_CATALOG_CODE === catalogCodes.refField,
+              )?.mrc_CATALOG_DESCRIPTION,
           });
         }
       }
       //建立回靶料號SAP文件(回靶才進入這段)
-      if (autoMapMaterialType) {
+      if (returnTargetType) {
         try {
           const sapViewType = queryAutoMapCodes.find(
             (item) => item.formSource === 'SAP_DATA',
@@ -779,21 +841,27 @@ export class MaterialRequestService {
     }
   }
 
-  async queryMaterialList(queryConditions: Partial<Record<string, string>>) {
+  async queryMaterialList(
+    queryConditions: Partial<Record<string, string>>,
+    empNo: string,
+    isDepartmentBoss: boolean,
+    isMaterialTeamMamber: boolean,
+    queryDeptEmpList: EmpAll[],
+  ) {
     try {
       const formNo = queryConditions.formNo;
       const materialNo = queryConditions.materialNo;
       const bomCode = queryConditions.bomCode;
       const drawing = queryConditions.drawing;
       const specialCode = queryConditions.specialCode;
-      const statusCode = queryConditions.statusCode || 'C';
+      const statusCode = queryConditions.statusCode || []; //|| 'C';
       const page = Number(queryConditions.page) || 1; //頁數
       const pageSize = Number(queryConditions.pageSize) || 10; //每頁筆數
 
-      const conditionStatusCode =
-        statusCode !== 'C'
-          ? 'mrfm.STATUS_CODE = :statusCode'
-          : 'mrfm.STATUS_CODE <> :statusCode';
+      // const conditionStatusCode =
+      //   statusCode !== 'C'
+      //     ? 'mrfm.STATUS_CODE = :statusCode'
+      //     : 'mrfm.STATUS_CODE <> :statusCode';
       const queryFormMaster = this.dataSource
         .getRepository(MaterialRequestFormMaster)
         .createQueryBuilder('mrfm')
@@ -801,7 +869,7 @@ export class MaterialRequestService {
           'mrfi.MATERIAL_ID',
           'mrfm.FORM_NO',
           'mrfm.USER_ID',
-          'mrfm.CREATED_DATE',
+          'mrfi.CREATED_DATE',
           'STATUS_CODE',
           'mrfi.BASE_UOM',
           'mld.LOV_DESCRIPTION AS baseUomDescription',
@@ -828,9 +896,32 @@ export class MaterialRequestService {
           MaterialLovData,
           'mld',
           "mld.LOV_CODE=mrfi.BASE_UOM AND mld.LOV_GROUP='SAP_UOM'",
-        )
-        .where(conditionStatusCode, { statusCode: statusCode });
+        );
+      // .where('mrfm.USER_ID=:empNo', { empNo });
 
+      //先判斷是否為料號小組，如果不是就在判斷是否為部門主管，若都不是就是一般使用者
+      isMaterialTeamMamber
+        ? queryFormMaster.where(`mrfm.STATUS_CODE NOT IN('N','O')`) //過濾掉草稿與作廢單據
+        : isDepartmentBoss
+          ? queryFormMaster.where(
+              `mrfm.USER_ID IN(:...queryDeptEmpList) AND mrfm.STATUS_CODE NOT IN('N','O')`, //過濾掉草稿與作廢單據
+              {
+                queryDeptEmpList: queryDeptEmpList.map((item) => item.empNo),
+              },
+            )
+          : queryFormMaster.where('mrfm.USER_ID=:empNo', { empNo });
+
+      // .andWhere(
+      //   statusCode && statusCode.length > 0
+      //     ? 'mrfm.STATUS_CODE IN(:...statusCode)'
+      //     : '1=1', // 如果 statusCode 為空，改為 IS NULL
+      //   { statusCode: statusCode || null },
+      // );
+      statusCode.length > 0 &&
+        queryFormMaster.andWhere('mrfm.STATUS_CODE IN(:...statusCode)', {
+          statusCode,
+        });
+      console.log(statusCode);
       //動態查詢條件原本if方式，修改成物件+loop查詢方式
       const parametersQueryConditions = [
         {
@@ -974,7 +1065,13 @@ export class MaterialRequestService {
       throw new CustomHttpException('申請單查詢失敗', false);
     }
   }
-  async queryFormList(queryConditions: Partial<Record<string, string>>) {
+  async queryFormList(
+    queryConditions: Partial<Record<string, string>>,
+    empNo: string,
+    isDepartmentBoss: boolean,
+    isMaterialTeamMamber: boolean,
+    queryDeptEmpList: EmpAll[],
+  ) {
     try {
       const formNo = queryConditions.formNo;
       const statusCode = queryConditions.statusCode;
@@ -987,10 +1084,24 @@ export class MaterialRequestService {
         .select([
           'mrfm.MASTER_ID',
           'mrfm.FORM_NO',
+          'mrfm.USER_ID',
           'mrfm.STATUS_CODE',
           'mrfm.CREATED_BY',
           'mrfm.CREATED_DATE',
         ]);
+      // .where('mrfm.USER_ID = :empNo', { empNo });
+
+      //先判斷是否為料號小組，如果不是就在判斷是否為部門主管，若都不是就是一般使用者
+      isMaterialTeamMamber
+        ? queryBuilder.where(`mrfm.STATUS_CODE NOT IN('N','O')`) //過濾掉草稿與作廢單據
+        : isDepartmentBoss
+          ? queryBuilder.where(
+              `mrfm.USER_ID IN(:...queryDeptEmpList) AND mrfm.STATUS_CODE NOT IN('N','O')`, //過濾掉草稿與作廢單據
+              {
+                queryDeptEmpList: queryDeptEmpList.map((item) => item.empNo),
+              },
+            )
+          : queryBuilder.where('mrfm.USER_ID=:empNo', { empNo });
 
       const parametersQueryConditions = [
         {
@@ -1000,7 +1111,7 @@ export class MaterialRequestService {
               .subQuery()
               .select('*')
               .from(MaterialRequestFormMaster, 'mrfms')
-              .where('mrfms.FORM_NO = :formNo', { formNo })
+              .andWhere('mrfms.FORM_NO = :formNo', { formNo })
               .andWhere('mrfms.MASTER_ID = mrfm.MASTER_ID'),
         },
         {
@@ -1010,7 +1121,7 @@ export class MaterialRequestService {
               .subQuery()
               .select('*')
               .from(MaterialRequestFormMaster, 'mrfms')
-              .where('mrfms.STATUS_CODE = :statusCode', { statusCode })
+              .where('mrfms.STATUS_CODE IN(:...statusCode)', { statusCode })
               .andWhere('mrfms.MASTER_ID=mrfm.MASTER_ID'),
         },
         {
@@ -1088,8 +1199,10 @@ export class MaterialRequestService {
           'mrfi.REMARKS',
           'mrfi.BASE_UOM',
           'mrfi.WEIGHT_UOM',
+          'mrfi.IS_SEMI_FINISHED',
           'mrfi.VALIDATION',
           'mrfi.TEMPLATE_CODE',
+          'mrfi.SOURCE_DATA',
           'mt.TEMPLATE_NAME',
         ])
         .innerJoin(
@@ -1186,9 +1299,27 @@ export class MaterialRequestService {
           await this.materialRequestItemsUom.findOne({
             where: { materialId: mcrMaterialId },
           });
+        //料號是否產生中間料號
+        const getGenSemiFinishedSpecialCode = queryMaterialCatologResult.find(
+          (item) => item.catalogGroup?.startsWith('SPECIAL_CODE1'), //取特徵碼1，暫時Hard Code
+        )?.catalogValue;
+        const getGenSemiFinishedTemplateCode = queryMaterialFormItems.find(
+          (item) => item.MATERIAL_ID === mcrMaterialId,
+        )?.TEMPLATE_CODE;
+        const isGenSemiFinished = await this.materialAutomap.find({
+          where: {
+            templateCode: getGenSemiFinishedTemplateCode,
+            typeKind: getGenSemiFinishedSpecialCode,
+          },
+        });
         queryDetailsData.push({
           materialId: mfi.MATERIAL_ID,
           materialNo: mfi.MATERIAL_NO,
+          //TemplateCode與TypeKind存在於AutoMap，且不為中間料號才出現產生中間料號按鈕
+          genSemiFinished:
+            isGenSemiFinished.length > 0 && mfi.IS_SEMI_FINISHED !== 'Y'
+              ? true
+              : false,
           primaryPlant: mfi.PRIMARY_PLANT,
           secondPlant:
             queryMaterialSecondPlant.length > 0
@@ -1208,8 +1339,10 @@ export class MaterialRequestService {
           baseUom: mfi.BASE_UOM,
           weightUom: mfi.WEIGHT_UOM,
           validation: mfi.VALIDATION === 'Y' ? true : false,
+          isSemiFinished: mfi.IS_SEMI_FINISHED === 'Y' ? true : false,
           templateCode: mfi.TEMPLATE_CODE,
           templateName: mfi.TEMPLATE_NAME,
+          sourceData: mfi.SOURCE_DATA,
           lovGroups: queryMaterialCatologResult
             .filter((item) => item.materialId === mfi.MATERIAL_ID)
             .map((item) => ({
@@ -1283,7 +1416,7 @@ export class MaterialRequestService {
           .createQueryBuilder()
           .update(MaterialRequestFormMaster)
           .set({
-            statusCode: 'C',
+            statusCode: 'O',
           })
           .where('MASTER_ID = :formId', { formId })
           .execute();
@@ -1527,7 +1660,7 @@ export class MaterialRequestService {
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error(error);
-      throw new CustomHttpException('物料編輯失敗', true);
+      throw new CustomHttpException('物料編輯失敗', false);
     }
   }
   async submitFormRequest(masterId: number) {
@@ -1549,7 +1682,7 @@ export class MaterialRequestService {
       //申請單狀態為草稿且物料驗證全通過才可送出
       if (queryForm.statusCode === 'N' && validItems.length === 0) {
         queryForm.submitDate = new Date(submitDate);
-        queryForm.statusCode = 'Y';
+        queryForm.statusCode = 'S';
         await this.materialRequestFormMaster.save(queryForm);
         return {
           status: true,
@@ -1565,7 +1698,164 @@ export class MaterialRequestService {
       console.error(error);
     }
   }
-  async postSapDatas(functionName: string, params: any) {
-    const result = await this.sapService.sapFunction(functionName, params);
+  // async postSapDatas(functionName: string, params: any) {
+  //   const result = await this.sapService.sapFunction(functionName, params);
+  // }
+  //依照設定順序，自動產生物料說明
+  async autoGenerateMaterialDescription({ templateCode, catalogCode }) {
+    const queryDataFromEdge = await this.materialLovData.find({
+      select: ['lovGroup'],
+      where: { fromEdgeData: true },
+    });
+    const queryDataResult = await Promise.all(
+      catalogCode.map(async (code) => {
+        //判斷CATALOG_CODE的Source Data
+        const dataSourceResult = queryDataFromEdge.some(
+          (item) => item.lovGroup === code.lovGroup,
+        );
+        const queryLovCodeSeq = await this.materialRuleRepository.find({
+          select: ['descriptionSeq'],
+          where: {
+            templateCode: templateCode,
+            lovGroup: code.lovGroup,
+          },
+        });
+        const queryTemplateLovData = dataSourceResult
+          ? //外圍資料庫
+            ((
+              await this.componentCode.find({
+                select: ['componentItemNumber'],
+                where: { componentCode: code.lovCode },
+              })
+            ).length > 0 &&
+              (await this.componentCode
+                .createQueryBuilder('componentCode')
+                .select('componentCode.componentItemNumber', 'LOV_CODE')
+                .addSelect(
+                  `${queryLovCodeSeq[0].descriptionSeq} AS "DESCRIPTION_SEQ"`, //Postgres預設會將欄位轉成小寫，加入雙引號維持大寫
+                )
+                .addSelect(`'BOM_CODE' AS "CATALOG_GROUP"`)
+                .where('componentCode.componentCode = :lovCode', {
+                  lovCode: code.lovCode,
+                })
+                .getRawMany())) ||
+            (await this.temDrawingCode
+              .createQueryBuilder('temDrawingCode')
+              .select('temDrawingCode.oldDrawingCode', 'LOV_CODE')
+              .addSelect(
+                `${queryLovCodeSeq[0].descriptionSeq} AS "DESCRIPTION_SEQ"`,
+              )
+              .addSelect(`'DRAWING' AS "CATALOG_GROUP"`)
+              .where('temDrawingCode.newDrawingCode = :lovCode', {
+                lovCode: code.lovCode,
+              })
+              .getRawOne()) ||
+            (await this.fccDrawingCode
+              .createQueryBuilder('fccDrawingCode')
+              .select('fccDrawingCode.oldDrawingCode', 'LOV_CODE')
+              .addSelect(
+                `${queryLovCodeSeq[0].descriptionSeq} AS "DESCRIPTION_SEQ"`,
+              )
+              .addSelect(`'DRAWING' AS "CATALOG_GROUP"`)
+              .where('fccDrawingCode.newDrawingCode = :lovCode', {
+                lovCode: code.lovCode,
+              })
+              .getRawOne())
+          : //EIP資料庫
+            await this.materialRuleRepository
+              .createQueryBuilder('mr')
+              .select([
+                'mr.CATALOG_CODE',
+                'mr.CATALOG_GROUP',
+                'mr.DESCRIPTION_SEQ',
+                'mld.LOV_CODE',
+                'mld.LOV_DESCRIPTION',
+              ])
+              .where('mr.TEMPLATE_CODE=:templateCode', { templateCode })
+              .innerJoin(
+                MaterialLovData,
+                'mld',
+                'mld.LOV_GROUP=mr.CATALOG_GROUP',
+              )
+              .andWhere('mr.DESCRIPTION_SEQ IS NOT NULL')
+              .andWhere('mld.LOV_CODE=:lovCode', code) //解構lovCode屬性，並排除需要從外圍取得資料的欄位
+              .andWhere('mld.LOV_GROUP=:lovGroup', code) //解構lovGroup屬性
+              .andWhere("mld.DESCRIPTION_COMBINATION='Y'")
+              .getRawMany();
+        return queryTemplateLovData;
+      }),
+    );
+    const flatData = queryDataResult.flat();
+    const filterData = flatData.filter(
+      (item) => item.CATALOG_GROUP !== 'BOM_CODE',
+    );
+    const filterBomCode = flatData.filter(
+      (item) => item.CATALOG_GROUP === 'BOM_CODE',
+    );
+    const mergeBomCode = filterBomCode.map((item) => item.LOV_CODE).join('/');
+    const mergedBOMCodeItem = {
+      LOV_CODE: mergeBomCode, //多個BomCode合併
+      DESCRIPTION_SEQ: filterBomCode[0].DESCRIPTION_SEQ, // 保留第一筆資料的 DESCRIPTION_SEQ
+      CATALOG_GROUP: filterBomCode[0].CATALOG_GROUP, // 保留第一筆資料的 CATALOG_GROUP
+    };
+    filterData.push(mergedBOMCodeItem);
+    const sortData = filterData.sort(
+      (a, b) => a.DESCRIPTION_SEQ - b.DESCRIPTION_SEQ,
+    );
+    const combineResult = sortData
+      .map((item) => item.LOV_DESCRIPTION || item.LOV_CODE)
+      .join(',');
+    return combineResult;
+  }
+
+  async getFormsOwner({ queryFormsOwner }) {
+    const { empNo, isMaterialTeamMamber, queryDeptEmpList, isDepartmentBoss } =
+      queryFormsOwner;
+    const deptEmplist = queryDeptEmpList.map((item) => item.empNo);
+    //編輯中的單據
+    const queryEditForms = await this.materialRequestFormMaster.findAndCount({
+      where: {
+        userId: empNo,
+        statusCode: In(['N', 'P']),
+      },
+    });
+    //送簽中的單據
+    const queryPendingForms = await this.materialRequestFormMaster.findAndCount(
+      {
+        where: {
+          userId: empNo,
+          statusCode: In(['S', 'B', 'M']),
+        },
+      },
+    );
+    //料號小組待簽核單據
+    const queryMaterialTeamForms = isMaterialTeamMamber
+      ? await this.materialRequestFormMaster.findAndCount({
+          where: {
+            statusCode: 'M',
+          },
+        })
+      : 0;
+    //部門主管待簽核單據
+    const queryDepartmentBossForms = isDepartmentBoss
+      ? await this.materialRequestFormMaster.findAndCount({
+          where: {
+            userId: In(deptEmplist),
+            statusCode: 'S',
+          },
+        })
+      : 0;
+    console.log(deptEmplist);
+    return {
+      //數量在索引1
+      edit: queryEditForms[1],
+      pending: queryPendingForms[1],
+      applyToBoss: isDepartmentBoss
+        ? queryDepartmentBossForms[1]
+        : queryDepartmentBossForms,
+      applyToMaterialTeam: isMaterialTeamMamber
+        ? queryMaterialTeamForms[1]
+        : queryMaterialTeamForms,
+    };
   }
 }

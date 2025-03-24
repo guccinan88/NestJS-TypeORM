@@ -54,4 +54,6 @@ export class MaterialRule {
   combinationFlag: boolean;
   @Column({ name: 'GROUP_CODE' })
   groupCode?: string;
+  @Column({ name: 'DESCRIPTION_SEQ' })
+  descriptionSeq?: number;
 }

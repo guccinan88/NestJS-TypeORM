@@ -10,7 +10,10 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const jwtCookie = request.cookies['__MOONSCAPE_ACCESS_TOKEN'];
     //如果Cookie沒有JWT拒絕進入
-    if (!jwtCookie) return false;
+    if (!jwtCookie) {
+      console.log('No Cookie');
+      return false;
+    }
 
     return this.authService.materialPermissionCheck({ jwtCookie }).pipe(
       map((response) => {

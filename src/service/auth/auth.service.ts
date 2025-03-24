@@ -13,10 +13,10 @@ export class AuthService {
     const PERMISSION_CODE = this.configService.get<string>('PERMISSION_CODE');
     const PERMISSION_CODE_CHECK_API = `${this.configService.get<string>(
       'PERMISSION_CODE_CHECK',
-    )}accessToken=${jwtCookie}&permissionCode=${PERMISSION_CODE}`;
-    console.log(PERMISSION_CODE_CHECK_API);
+    )}accessToken=${jwtCookie}`;
     return this.httpService.get(PERMISSION_CODE_CHECK_API).pipe(
       map((response) => {
+        console.log(response);
         return response;
       }),
       catchError((error) => {

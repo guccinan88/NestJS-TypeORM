@@ -19,6 +19,24 @@ export class MaterialLovData {
 
   @Column({ name: 'ENABLE_FLAG' })
   enableFlag: boolean;
+  @Column({
+    name: 'DESCRIPTION_COMBINATION',
+    type: 'varchar',
+    transformer: {
+      to: (value: boolean) => (value ? 'Y' : 'N'),
+      from: (value: string) => value === 'Y',
+    },
+  })
+  descriptionCombination: boolean;
+  @Column({
+    name: 'FROM_EDGE_DATA',
+    type: 'varchar',
+    transformer: {
+      to: (value: boolean) => (value ? 'Y' : 'N'),
+      from: (value: string) => value === 'Y',
+    },
+  })
+  fromEdgeData: boolean;
   @Column({ name: 'ATTR_V1' })
   attrV1?: string;
   @Column({ name: 'ATTR_V2' })
