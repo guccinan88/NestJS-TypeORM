@@ -12,3 +12,7 @@ export { MaterialRequestItemsUom } from './material-request-items-uom.entity';
 export { MaterialAutomap } from './material-automap.entity';
 export { DeptAll } from './xxhr_dept_all.entity';
 export { EmpAll } from './xxhr_emp_all.entity';
+export { MaterialApprovedLog } from './material-approved-log.entity';
+export { MaterialApproveFlow } from './material-approve-flow.entity';
+export { MaterialApprovedLogNew } from './material-approved-log-new.entity';
+export { MaterialApproveFlowNew } from './material-approve-flow-new.entity';

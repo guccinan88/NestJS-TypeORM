@@ -18,10 +18,6 @@ export class MaterialRequestFormMaster {
   updatedDate?: Date;
   @Column({ name: 'UPDATED_BY' })
   updatedBy?: Date;
-  @Column({ name: 'DEPT_BOSS_REMARKS' })
-  deptBossRemarks?: string;
-  @Column({ name: 'MATERIAL_TEAM_REMARKS' })
-  materialTeamRemarks?: string;
-  @Column({ name: 'RETURN_REMARKS' })
-  returnRemarks?: string;
+  @Column({ name: 'CREATED_DATE' })
+  createdDate?: Date;
 }

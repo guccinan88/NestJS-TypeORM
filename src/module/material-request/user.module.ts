@@ -3,6 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   DeptAll,
   EmpAll,
+  MaterialApprovedLog,
+  MaterialApprovedLogNew,
+  MaterialApproveFlow,
+  MaterialApproveFlowNew,
   MaterialAutomap,
   MaterialLovData,
   MaterialRequestCatalog,
@@ -13,6 +17,7 @@ import {
   MaterialRule,
   MaterialTemplate,
 } from 'src/entities';
+import { ApproveService } from 'src/service/approve/approve.service';
 import { UserService } from 'src/service/auth/user.service';
 
 @Module({
@@ -29,11 +34,15 @@ import { UserService } from 'src/service/auth/user.service';
         MaterialRequestPlant,
         MaterialRequestItemsUom,
         MaterialAutomap,
+        MaterialApprovedLog,
+        MaterialApproveFlow,
+        MaterialApproveFlowNew,
+        MaterialApprovedLogNew,
       ],
       'msConnection',
     ),
   ],
-  providers: [UserService],
+  providers: [UserService, ApproveService],
   exports: [UserService],
   controllers: [],
 })

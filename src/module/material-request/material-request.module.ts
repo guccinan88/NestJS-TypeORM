@@ -14,18 +14,26 @@ import {
   MaterialRequestPlant,
   MaterialRequestItemsUom,
   MaterialAutomap,
+  MaterialApprovedLog,
+  MaterialApproveFlow,
+  MaterialApproveFlowNew,
+  MaterialApprovedLogNew,
+  DeptAll,
+  EmpAll,
 } from 'src/entities';
 import { DataSourceService } from 'src/service/database/data-source';
 import { MaterialRequestService } from 'src/service/material-request/material-request.service';
-import { SapServiceModule } from './sap-rfc.module';
+// import { SapServiceModule } from './sap-rfc.module';
 import { UserModule } from './user.module';
 import { UserService } from 'src/service/auth/user.service';
 import { AuthGuard } from 'src/guards/auth/auth.guard';
 import { AuthModule } from '../auth/auth.module';
+import { ApproveService } from 'src/service/approve/approve.service';
 
 @Module({
   imports: [
-    SapServiceModule,
+    // SapServiceModule,
+    TypeOrmModule.forFeature([DeptAll, EmpAll], 'msEmp'),
     TypeOrmModule.forFeature(
       [
         MaterialTemplate,
@@ -37,6 +45,10 @@ import { AuthModule } from '../auth/auth.module';
         MaterialRequestPlant,
         MaterialRequestItemsUom,
         MaterialAutomap,
+        MaterialApprovedLog,
+        MaterialApproveFlow,
+        MaterialApproveFlowNew,
+        MaterialApprovedLogNew,
       ],
       'msConnection',
     ),
@@ -47,7 +59,7 @@ import { AuthModule } from '../auth/auth.module';
     UserModule,
     AuthModule,
   ],
-  providers: [MaterialRequestService, DataSourceService],
+  providers: [MaterialRequestService, DataSourceService, ApproveService],
   controllers: [MaterialRequestController],
 })
 export class MaterialRequestModule {}

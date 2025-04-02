@@ -171,7 +171,13 @@
 - 03.24 增加單位主管申請單可視度卡控(清單不顯示草稿與作廢單據)
 - 03.24 增加料號小組申請單可視度卡控(清單不顯示草稿與作廢單據)
 - 03.24 開發區調整TypeORM版本
-- 03.24 增加從Permission API取得結果是undifined的錯誤處理
+- 03.24 增加從Permission API取得結果是undefined的錯誤處理
+- 03.25 增加料號小組待簽核狀態碼
+- 03.25 增加PLANT層物料存在與否判斷
+- 03.26 建立Approve相關程式碼
+- 03.26 建立ApproveLog Entity
+- 03.26 調整簽核程式碼邏輯
+- 03.28 修正判斷是否可以產生中間料號欄位(templateCode=>mainTemplateCode)
 
 ## Note
 

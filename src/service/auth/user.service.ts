@@ -6,6 +6,7 @@ import { DeptAll, EmpAll, MaterialRequestFormMaster } from 'src/entities';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomHttpException } from 'src/filters/http-exception/http-exception.filter';
+import { ApproveService } from '../approve/approve.service';
 
 @Injectable()
 export class UserService {
@@ -17,6 +18,7 @@ export class UserService {
     private readonly empRepository: Repository<EmpAll>,
     @InjectRepository(MaterialRequestFormMaster, 'msConnection')
     private readonly materialRequestFormMaster: Repository<MaterialRequestFormMaster>,
+    private readonly approveService: ApproveService,
   ) {}
 
   async getJwtVerify({ jwtCookie }) {
@@ -42,7 +44,7 @@ export class UserService {
         const queryUserResult = await this.empRepository.find({
           select: ['empNo', 'empName'],
           where: {
-            empNo: (jwtDecode as any).workerNumber,
+            empNo: (jwtDecode as any).workerNumber, //測試時候把這裡改成料號小組或單位主管工號
           },
           relations: ['dept'], //關聯同個部門
         });
@@ -87,6 +89,9 @@ export class UserService {
               isDepartmentBoss,
               isMaterialTeamMamber,
               queryDeptEmpList,
+              empName,
+              bossEmpNo,
+              getMaterialTeamMemberResult,
             }
           : {
               isDepartmentBoss,
@@ -102,37 +107,123 @@ export class UserService {
       };
     }
   }
-  async signatureForm({ request, statusCode }) {
-    const { masterId, remarks } = request;
-    if (statusCode === 'P') {
-      await this.materialRequestFormMaster.update(
-        { masterId: masterId },
-        { statusCode: statusCode },
-      );
-    } else if (statusCode === 'A') {
-      const updateFormStatus = await this.materialRequestFormMaster.update(
-        { masterId: masterId },
-        { statusCode: statusCode, deptBossRemarks: remarks },
-      );
-      return updateFormStatus.affected;
-    } else if (statusCode === 'V') {
-      const updateFormStatus = await this.materialRequestFormMaster.update(
-        { masterId: masterId },
-        { statusCode: statusCode, materialTeamRemarks: remarks },
-      );
-      return updateFormStatus.affected;
-    } else if (statusCode === 'N') {
-      const updateFormStatus = await this.materialRequestFormMaster.update(
-        { masterId: masterId },
-        { statusCode: statusCode, returnRemarks: remarks },
-      );
-      return updateFormStatus.affected;
-    } else if (statusCode === 'M') {
-      const updateFormStatus = await this.materialRequestFormMaster.update(
-        { masterId: masterId },
-        { statusCode: statusCode },
-      );
-      return updateFormStatus.affected;
-    }
-  }
+  // async signatureForm({ data, statusCode, empName, empNo }) {
+  //   const { masterId, remarks } = data;
+  //   if (statusCode === 'P') {
+  //     // await this.materialRequestFormMaster.update(
+  //     //   { masterId: masterId },
+  //     //   { statusCode: statusCode },
+  //     // );
+  //     const approvedResult =
+  //       await this.approveService.createMaterialApprovedLog({
+  //         masterId,
+  //         approver: empNo,
+  //         approveTemplate: 'APPROVE_FLOW2',
+  //         rank: 20,
+  //         reason: '自動產生中間料號',
+  //         stageType: 'SEMI_EDIT',
+  //         status: 'WAIT_APPROVAL',
+  //       });
+  //     console.log(approvedResult);
+  //   } else if (statusCode === 'A') {
+  //     const updateFormStatus = await this.materialRequestFormMaster.update(
+  //       { masterId: masterId },
+  //       { statusCode: statusCode },
+  //     );
+  //     await this.approveService.createMaterialApprovedLog({
+  //       masterId,
+  //       approver: empNo,
+  //       approveTemplate: 'APPROVE_FLOW2',
+  //       rank: 30,
+  //       reason: '料號小組簽核',
+  //       stageType: 'MATERIAL_TEAM',
+  //       status: 'APPROVED',
+  //     });
+  //     return updateFormStatus.affected;
+  //   }
+  //   // else if (statusCode === 'V') {
+  //   //   const updateFormStatus = await this.materialRequestFormMaster.update(
+  //   //     { masterId: masterId },
+  //   //     { statusCode: statusCode },
+  //   //   );
+  //   //   const approvedResult =
+  //   //     await this.approveService.createMaterialApprovedLog({
+  //   //       masterId,
+  //   //       approver: empNo,
+  //   //       approveTemplate: 'APPROVE_FLOW2',
+  //   //       rank: 30,
+  //   //       reason: '料號小組簽核',
+  //   //       stageType: 'MATERIAL_TEAM',
+  //   //       status: 'WAIT_APPROVAL',
+  //   //     });
+  //   //   console.log(approvedResult);
+  //   // }
+  //   else if (statusCode === 'N') {
+  //     const updateFormStatus = await this.materialRequestFormMaster.update(
+  //       { masterId: masterId },
+  //       { statusCode: statusCode },
+  //     );
+  //     const approvedResult =
+  //       await this.approveService.createMaterialApprovedLog({
+  //         masterId,
+  //         approver: empNo,
+  //         approveTemplate: 'APPROVE_FLOW2',
+  //         rank: 0,
+  //         reason: '退簽',
+  //         stageType: 'APPLICANT',
+  //         status: 'WAIT_APPROVAL',
+  //       });
+  //     console.log(approvedResult);
+  //     //將過去的簽核紀錄都標示finish
+  //     // await this.approveService.returnMaterialApprovedLog({
+  //     //   masterId,
+  //     // });
+  //     // await this.approveService.createMaterialApprovedLog({
+  //     //   masterId,
+  //     //   userId: empNo,
+  //     //   userName: empName,
+  //     //   statusCode,
+  //     //   manualReason: remarks,
+  //     // });
+  //     // return updateFormStatus.affected;
+  //   } else if (statusCode === 'M') {
+  //     // const updateFormStatus = await this.materialRequestFormMaster.update(
+  //     //   { masterId: masterId },
+  //     //   { statusCode: statusCode },
+  //     // );
+  //     const approvedResult =
+  //       await this.approveService.createMaterialApprovedLog({
+  //         masterId,
+  //         approver: empNo,
+  //         approveTemplate: 'APPROVE_FLOW2',
+  //         rank: 20,
+  //         reason: '中間料號編輯完成',
+  //         stageType: 'SEMI_EDIT',
+  //         status: 'APPROVED',
+  //       });
+  //     console.log(approvedResult);
+  //   } else if (statusCode === 'B') {
+  //     // const updateFormStatus = await this.materialRequestFormMaster.update(
+  //     //   { masterId: masterId },
+  //     //   { statusCode: statusCode },
+  //     // );
+  //     const approvedResult =
+  //       await this.approveService.updateMaterialApprovedLog({
+  //         masterId,
+  //         reason: '部門主管簽核',
+  //         status: 'APPROVED',
+  //       });
+  //     await this.approveService.createMaterialApprovedLog({
+  //       masterId,
+  //       approver: empNo,
+  //       approveTemplate: 'APPROVE_FLOW2',
+  //       rank: 30,
+  //       reason: '料號小組簽核',
+  //       stageType: 'MATERIAL_TEAM',
+  //       status: 'WAIT_APPROVAL',
+  //     });
+  //     console.log(approvedResult);
+  //     // return updateFormStatus.affected;
+  //   }
+  // }
 }
